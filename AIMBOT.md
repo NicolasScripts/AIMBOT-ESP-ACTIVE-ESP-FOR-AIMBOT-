@@ -1,0 +1,523 @@
+-- LocalScript: ESP + Aimbot Toggle B + Reticle Ajustável + Barra de Vida + Team Check Dinâmico + Menu Draggable + Submenu
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local UserInputService = game:GetService("UserInputService")
+
+-- ====== Config ======
+local CFG = {
+    boxTransparency = 0.45,
+    boxInset = 0.18,
+    nameSize = Vector2.new(120,44),
+    nameOffset = Vector3.new(0,2.6,0),
+    reticleRadius = 90,
+    reticleStep = 10,
+    minRadius = 20,
+    maxRadius = 400,
+    checkLOS = true,
+    maxTargetsShow = 8,
+    cameraLerp = 1
+}
+
+-- ====== Estado ======
+local state = {
+    active = false,
+    lockedTarget = nil,
+    playersData = {},
+    currentFound = {},
+    aimbotEnabled = false
+}
+
+-- ====== GUI ======
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ESPDevGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- ===== Menu Principal =====
+local mainMenu = Instance.new("Frame")
+mainMenu.Size = UDim2.new(0,300,0,180)
+mainMenu.Position = UDim2.new(0,12,0,12)
+mainMenu.BackgroundColor3 = Color3.fromRGB(26,26,26)
+mainMenu.BorderSizePixel = 0
+mainMenu.Active = true
+mainMenu.Draggable = true
+mainMenu.Parent = screenGui
+
+local title = Instance.new("TextLabel", mainMenu)
+title.Size = UDim2.new(1,-12,0,28)
+title.Position = UDim2.new(-0.25,6,0,15) --posição do coiso
+title.BackgroundTransparency = 1
+title.TextColor3 = Color3.fromRGB(230,230,230)
+title.Font = Enum.Font.SourceSansBold
+title.Text = "@nicolaas.olv"
+title.TextScaled = true
+title.TextSize = 30
+
+local radiusLabel = Instance.new("TextLabel", mainMenu)
+radiusLabel.Size = UDim2.new(1,-12,0,18)
+radiusLabel.Position = UDim2.new(0,6,0,45)
+radiusLabel.BackgroundTransparency = 1
+radiusLabel.TextColor3 = Color3.fromRGB(200,200,200)
+radiusLabel.Font = Enum.Font.SourceSans
+radiusLabel.Text = "Raio: "..CFG.reticleRadius.." px"
+radiusLabel.TextXAlignment = Enum.TextXAlignment.Left
+radiusLabel.TextScaled = true
+radiusLabel.TextSize = 22
+
+-- Botões de raio
+local btnDec = Instance.new("TextButton", mainMenu)
+btnDec.Size = UDim2.new(0,36,0,28)
+btnDec.Position = UDim2.new(0,6,0,90)
+btnDec.Text = "-"
+btnDec.Font = Enum.Font.SourceSansBold
+btnDec.TextScaled = true
+btnDec.TextSize = 26
+btnDec.BackgroundColor3 = Color3.fromRGB(60,60,60)
+btnDec.TextColor3 = Color3.fromRGB(255,255,255)
+
+local btnInc = Instance.new("TextButton", mainMenu)
+btnInc.Size = UDim2.new(0,36,0,28)
+btnInc.Position = UDim2.new(0,48,0,90)
+btnInc.Text = "+"
+btnInc.Font = Enum.Font.SourceSansBold
+btnInc.TextScaled = true
+btnInc.TextSize = 26
+btnInc.BackgroundColor3 = Color3.fromRGB(60,60,60)
+btnInc.TextColor3 = Color3.fromRGB(255,255,255)
+
+-- Toggle ESP
+local toggleBtn = Instance.new("TextButton", mainMenu)
+toggleBtn.Size = UDim2.new(0,160,0,28)
+toggleBtn.Position = UDim2.new(1,-172,0,90)
+toggleBtn.Text = "Ativar ESP"
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(70,120,70)
+toggleBtn.TextScaled = true
+toggleBtn.TextSize = 24
+
+-- ===== ADICIONADO: Botão de Aimbot (não altera nada do resto) =====
+local aimbotBtn = Instance.new("TextButton", mainMenu)
+aimbotBtn.Size = UDim2.new(0,120,0,24)
+aimbotBtn.Position = UDim2.new(1,-150,0,60) -- posicionado no menu; ajusta se quiser
+aimbotBtn.Text = "Aimbot: OFF"
+aimbotBtn.Font = Enum.Font.SourceSansBold
+aimbotBtn.TextColor3 = Color3.fromRGB(255,255,255)
+aimbotBtn.BackgroundColor3 = Color3.fromRGB(80,80,80)
+aimbotBtn.TextScaled = true
+aimbotBtn.TextSize = 18
+
+aimbotBtn.MouseButton1Click:Connect(function()
+    state.aimbotEnabled = not state.aimbotEnabled
+    if state.aimbotEnabled then
+        aimbotBtn.Text = "Aimbot: ON"
+        lockLabel.Text = "Locked: ON"
+    else
+        aimbotBtn.Text = "Aimbot: OFF"
+        lockLabel.Text = "Locked: -"
+    end
+end)
+-- ==================================================================
+
+-- LOS
+local losBtn = Instance.new("TextButton", mainMenu)
+losBtn.Size = UDim2.new(0,140,0,22)
+losBtn.Position = UDim2.new(0,6,0,127)
+losBtn.Text = "Check LOS: "..tostring(CFG.checkLOS)
+losBtn.Font = Enum.Font.SourceSansBold
+losBtn.TextColor3 = Color3.fromRGB(220,220,220)
+losBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+losBtn.TextScaled = true
+losBtn.TextSize = 20
+
+-- Locked label
+local lockLabel = Instance.new("TextLabel", mainMenu)
+lockLabel.Size = UDim2.new(0,140,0,18)
+lockLabel.Position = UDim2.new(0.8,-292,0,65)
+lockLabel.BackgroundTransparency = 1
+lockLabel.TextColor3 = Color3.fromRGB(220,220,220)
+lockLabel.Font = Enum.Font.Code
+lockLabel.Text = "Locked: -"
+lockLabel.TextXAlignment = Enum.TextXAlignment.Right
+lockLabel.TextScaled = true
+lockLabel.TextSize = 20
+
+-- Close & Minimize com memória de posição
+local closeBtn = Instance.new("TextButton", mainMenu)
+closeBtn.Size = UDim2.new(0,36,0,22)
+closeBtn.Position = UDim2.new(1,-84,0,6)
+closeBtn.BackgroundColor3 = Color3.fromRGB(150,50,50)
+closeBtn.Text = "X"
+closeBtn.Font = Enum.Font.SourceSansBold
+closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+closeBtn.TextScaled = true
+closeBtn.TextSize = 22
+
+local minimizeBtn = Instance.new("TextButton", mainMenu)
+minimizeBtn.Size = UDim2.new(0,36,0,22)
+minimizeBtn.Position = UDim2.new(1,-130,0,6)
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(100,100,100)
+minimizeBtn.Text = "-"
+minimizeBtn.Font = Enum.Font.SourceSansBold
+minimizeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+minimizeBtn.TextScaled = true
+minimizeBtn.TextSize = 22
+
+local restoreBtn = Instance.new("TextButton", screenGui)
+restoreBtn.Size = UDim2.new(0,36,0,28)
+restoreBtn.Position = mainMenu.Position -- abre no lugar onde o menu estava
+restoreBtn.BackgroundColor3 = Color3.fromRGB(100,100,100)
+restoreBtn.Text = "+"
+restoreBtn.Font = Enum.Font.SourceSansBold
+restoreBtn.TextColor3 = Color3.fromRGB(255,255,255)
+restoreBtn.TextScaled = true
+restoreBtn.TextSize = 24
+restoreBtn.Visible = false
+restoreBtn.ZIndex = 10
+
+-- ===== Eventos Minimize/Restore com memória =====
+minimizeBtn.MouseButton1Click:Connect(function()
+    -- salva posição do mainMenu antes de sumir
+    restoreBtn.Position = mainMenu.Position
+    mainMenu.Visible = false
+    restoreBtn.Visible = true
+end)
+
+restoreBtn.MouseButton1Click:Connect(function()
+    -- restaura menu pra posição onde estava
+    mainMenu.Position = restoreBtn.Position
+    mainMenu.Visible = true
+    restoreBtn.Visible = false
+end)
+
+
+-- Targets label
+local targetsLabel = Instance.new("TextLabel", mainMenu)
+targetsLabel.Size = UDim2.new(1,-12,0,18)
+targetsLabel.Position = UDim2.new(0,6,0,150)
+targetsLabel.BackgroundTransparency = 1
+targetsLabel.TextColor3 = Color3.fromRGB(220,220,220)
+targetsLabel.Font = Enum.Font.Code
+targetsLabel.Text = "Targets: -"
+targetsLabel.TextXAlignment = Enum.TextXAlignment.Left
+targetsLabel.TextScaled = true
+targetsLabel.TextSize = 20
+
+-- Reticle
+local reticle = Instance.new("Frame")
+reticle.AnchorPoint = Vector2.new(0.5,0.5)
+reticle.Position = UDim2.new(0.5,0,0.5,0)
+reticle.Size = UDim2.new(0, CFG.reticleRadius*2,0,CFG.reticleRadius*2)
+reticle.BackgroundTransparency = 1
+reticle.Parent = screenGui
+local stroke = Instance.new("UIStroke", reticle)
+stroke.Thickness = 2
+stroke.Color = Color3.fromRGB(200,200,200)
+local corner = Instance.new("UICorner", reticle)
+corner.CornerRadius = UDim.new(1,0)
+
+-- ===== Helpers =====
+local function clamp(v,a,b) return math.min(math.max(v,a),b) end
+local function isTeammate(p) if not LocalPlayer.Team or not p.Team then return false end return LocalPlayer.Team == p.Team end
+
+local function makeBoxFor(part)
+    local b = Instance.new("BoxHandleAdornment")
+    b.Adornee = part
+    b.AlwaysOnTop = true
+    b.Size = part.Size + Vector3.new(CFG.boxInset,CFG.boxInset,CFG.boxInset)
+    b.Transparency = CFG.boxTransparency
+    b.Color3 = Color3.fromRGB(255,80,80)
+    b.ZIndex = 10
+    b.Parent = part
+    return b
+end
+
+local function makeBillboardFor(part, player)
+    local g = Instance.new("BillboardGui")
+    g.Adornee = part
+    g.Size = UDim2.new(0, CFG.nameSize.X,0, CFG.nameSize.Y)
+    g.StudsOffset = CFG.nameOffset
+    g.AlwaysOnTop = true
+    g.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    local cont = Instance.new("Frame", g)
+    cont.Size = UDim2.new(1,0,1,0)
+    cont.BackgroundTransparency = 0.2
+    cont.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    cont.BorderSizePixel = 0
+    local name = Instance.new("TextLabel", cont)
+    name.Size = UDim2.new(1,-8,0,20)
+    name.Position = UDim2.new(0,4,0,2)
+    name.BackgroundTransparency = 1
+    name.Text = player.Name
+    name.TextScaled = true
+    name.TextSize = 24
+    name.TextColor3 = Color3.fromRGB(255,255,255)
+    name.Font = Enum.Font.SourceSansSemibold
+
+    local healthBar = Instance.new("Frame", cont)
+    healthBar.Size = UDim2.new(1, -8, 0, 6)
+    healthBar.Position = UDim2.new(0,4,0,22)
+    healthBar.BackgroundColor3 = Color3.fromRGB(0,255,0)
+    healthBar.BorderSizePixel = 0
+
+    return {gui=g, container=cont, name=name, healthBar=healthBar}
+end
+
+local function cleanupPlayerData(player)
+    local d = state.playersData[player]
+    if not d then return end
+    if d.box then pcall(function() d.box:Destroy() end) end
+    if d.bill and d.bill.gui then pcall(function() d.bill.gui:Destroy() end) end
+    state.playersData[player] = nil
+end
+
+local function ensurePlayerVisuals(player)
+    if not player or not player.Character then return end
+    local root = player.Character:FindFirstChild("HumanoidRootPart")
+    local head = player.Character:FindFirstChild("Head")
+    if not (root and head) then return end
+    local data = state.playersData[player]
+    if not data then data = {} state.playersData[player] = data end
+    if not data.box then data.box = makeBoxFor(root) end
+    if not data.bill then data.bill = makeBillboardFor(head, player) end
+end
+
+local function isVisibleHead(player)
+    if not CFG.checkLOS then return true end
+    if not player.Character or not player.Character:FindFirstChild("Head") then return false end
+    local origin = Camera.CFrame.Position
+    local dir = player.Character.Head.Position - origin
+    local rayParams = RaycastParams.new()
+    rayParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    local r = workspace:Raycast(origin, dir, rayParams)
+    return not r or r.Instance:IsDescendantOf(player.Character)
+end
+
+-- ===== Atualizar Reticle =====
+local function updateReticle() reticle.Size = UDim2.new(0, CFG.reticleRadius*2, 0, CFG.reticleRadius*2) end
+
+-- ===== Core Loop =====
+RunService.RenderStepped:Connect(function()
+    if not state.active then return end
+    local centerX, centerY = Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2
+    local found = {}
+    for _,player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local head = player.Character:FindFirstChild("Head")
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            local hum = player.Character:FindFirstChild("Humanoid")
+            if head and root and hum and hum.Health > 0 then
+                if not isTeammate(player) and isVisibleHead(player) then
+                    local headPos, onScreen = Camera:WorldToViewportPoint(head.Position)
+                    if onScreen then
+                        local dx, dy = headPos.X - centerX, headPos.Y - centerY
+                        local distPx = math.sqrt(dx*dx + dy*dy)
+                        if distPx <= CFG.reticleRadius then table.insert(found, {player=player, d=distPx}) end
+                    end
+                end
+            end
+        end
+    end
+
+    table.sort(found, function(a,b) return a.d < b.d end)
+    state.currentFound = found
+
+    for i,entry in ipairs(found) do
+        if i > CFG.maxTargetsShow then break end
+        ensurePlayerVisuals(entry.player)
+        local char = entry.player.Character
+        local hum = char and char:FindFirstChild("Humanoid")
+        if hum and state.playersData[entry.player] and state.playersData[entry.player].bill then
+            local hb = state.playersData[entry.player].bill.healthBar
+            local pct = clamp(hum.Health / hum.MaxHealth, 0, 1)
+            hb.Size = UDim2.new(pct,0,1,0)
+            if pct > 0.6 then hb.BackgroundColor3 = Color3.fromRGB(0,255,0)
+            elseif pct > 0.3 then hb.BackgroundColor3 = Color3.fromRGB(255,255,0)
+            else hb.BackgroundColor3 = Color3.fromRGB(255,0,0) end
+        end
+    end
+
+    if state.aimbotEnabled and state.currentFound[1] then
+        local target = state.currentFound[1].player
+        local hum = target.Character and target.Character:FindFirstChild("Humanoid")
+        if target.Character and target.Character:FindFirstChild("Head") and hum and hum.Health > 0 then
+            local pos,_ = Camera:WorldToViewportPoint(target.Character.Head.Position)
+            reticle.Position = UDim2.new(0, pos.X, 0, pos.Y)
+            stroke.Color = Color3.fromRGB(255,80,80)
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, target.Character.Head.Position), CFG.cameraLerp)
+        else
+            reticle.Position = UDim2.new(0.5,0,0.5,0)
+            stroke.Color = Color3.fromRGB(200,200,200)
+        end
+    else
+        reticle.Position = UDim2.new(0.5,0,0.5,0)
+        stroke.Color = Color3.fromRGB(200,200,200)
+    end
+
+    local names = {}
+    for _,entry in ipairs(found) do table.insert(names, entry.player.Name) end
+    targetsLabel.Text = #names > 0 and "Targets: "..table.concat(names," / ") or "Targets: -"
+end)
+
+-- ===== Input =====
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        if input.KeyCode == Enum.KeyCode.B then
+            state.aimbotEnabled = not state.aimbotEnabled
+            lockLabel.Text = state.aimbotEnabled and "Locked: ON" or "Locked: -"
+            -- keep aimbotBtn in sync if toggled by keyboard
+            aimbotBtn.Text = state.aimbotEnabled and "Aimbot: ON" or "Aimbot: OFF"
+        end
+    end
+end)
+
+btnInc.MouseButton1Click:Connect(function()
+    CFG.reticleRadius = clamp(CFG.reticleRadius + CFG.reticleStep, CFG.minRadius, CFG.maxRadius)
+    radiusLabel.Text = "Raio: "..CFG.reticleRadius.." px"
+    updateReticle()
+end)
+btnDec.MouseButton1Click:Connect(function()
+    CFG.reticleRadius = clamp(CFG.reticleRadius - CFG.reticleStep, CFG.minRadius, CFG.maxRadius)
+    radiusLabel.Text = "Raio: "..CFG.reticleRadius.." px"
+    updateReticle()
+end)
+
+toggleBtn.MouseButton1Click:Connect(function()
+    state.active = not state.active
+    toggleBtn.Text = state.active and "Desativar ESP" or "Ativar ESP"
+    toggleBtn.BackgroundColor3 = state.active and Color3.fromRGB(160,60,60) or Color3.fromRGB(70,120,70)
+    if not state.active then
+        state.aimbotEnabled = false
+        lockLabel.Text = "Locked: -"
+        aimbotBtn.Text = "Aimbot: OFF"
+        for p,_ in pairs(state.playersData) do cleanupPlayerData(p) end
+    end
+end)
+
+losBtn.MouseButton1Click:Connect(function()
+    CFG.checkLOS = not CFG.checkLOS
+    losBtn.Text = "Check LOS: "..tostring(CFG.checkLOS)
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    state.active = false
+    state.aimbotEnabled = false
+    for p,_ in pairs(state.playersData) do cleanupPlayerData(p) end
+    screenGui:Destroy()
+    Camera.CameraType = Enum.CameraType.Custom
+end)
+
+Players.PlayerRemoving:Connect(cleanupPlayerData)
+
+-- ===== Minimize/Restore =====
+minimizeBtn.MouseButton1Click:Connect(function()
+    mainMenu.Visible = false
+    restoreBtn.Visible = true
+end)
+
+restoreBtn.MouseButton1Click:Connect(function()
+    mainMenu.Visible = true
+    restoreBtn.Visible = false
+end)
+
+-- Tornar botão restore arrastável
+local dragging = false
+local dragStartPos = Vector2.new()
+local restoreStartPos = UDim2.new()
+
+restoreBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStartPos = input.Position
+        restoreStartPos = restoreBtn.Position
+    end
+end)
+restoreBtn.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStartPos
+        restoreBtn.Position = restoreStartPos + UDim2.new(0, delta.X, 0, delta.Y)
+    end
+end)
+restoreBtn.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+-- ====== Loop Extra de Atualização de ESP ======
+RunService.RenderStepped:Connect(function()
+    if not state.active then return end
+    for _,player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            local head = player.Character:FindFirstChild("Head")
+            local hum = player.Character:FindFirstChild("Humanoid")
+            if root and head and hum and hum.Health > 0 and not isTeammate(player) then
+                ensurePlayerVisuals(player)
+            else
+                cleanupPlayerData(player)
+            end
+        end
+    end
+end)
+-- ===== BOTÃO PARA ABRIR SUBMENU =====
+local openSubMenuBtn = Instance.new("TextButton", mainMenu)
+openSubMenuBtn.Size = UDim2.new(0,28,0,28)
+openSubMenuBtn.Position = UDim2.new(1,-36,0,6)
+openSubMenuBtn.BackgroundColor3 = Color3.fromRGB(100,100,100)
+openSubMenuBtn.Text = ">"
+openSubMenuBtn.Font = Enum.Font.SourceSansBold
+openSubMenuBtn.TextColor3 = Color3.fromRGB(255,255,255)
+openSubMenuBtn.TextScaled = true
+openSubMenuBtn.TextSize = 22
+
+-- ===== SUBMENU =====
+local subMenu = Instance.new("Frame")
+subMenu.Size = mainMenu.Size
+subMenu.Position = mainMenu.Position
+subMenu.BackgroundColor3 = Color3.fromRGB(35,35,35)
+subMenu.BorderSizePixel = 0
+subMenu.Visible = false
+subMenu.Active = true
+subMenu.Draggable = true
+subMenu.Parent = screenGui
+
+local subTitle = Instance.new("TextLabel", subMenu)
+subTitle.Size = UDim2.new(1,-12,0,28)
+subTitle.Position = UDim2.new(0,6,0,15)
+subTitle.BackgroundTransparency = 1
+subTitle.TextColor3 = Color3.fromRGB(230,230,230)
+subTitle.Font = Enum.Font.SourceSansBold
+subTitle.Text = "SUBMENU"
+subTitle.TextScaled = true
+subTitle.TextSize = 28
+
+local backBtn = Instance.new("TextButton", subMenu)
+backBtn.Size = UDim2.new(0,28,0,28)
+backBtn.Position = UDim2.new(0,6,0,6)
+backBtn.BackgroundColor3 = Color3.fromRGB(100,100,100)
+backBtn.Text = "<"
+backBtn.Font = Enum.Font.SourceSansBold
+backBtn.TextColor3 = Color3.fromRGB(255,255,255)
+backBtn.TextScaled = true
+backBtn.TextSize = 22
+
+-- ===== Eventos de Submenu com memória de posição =====
+openSubMenuBtn.MouseButton1Click:Connect(function()
+    -- salvar posição atual do mainMenu
+    subMenu.Position = mainMenu.Position
+    mainMenu.Visible = false
+    subMenu.Visible = true
+end)
+
+backBtn.MouseButton1Click:Connect(function()
+    -- restaurar posição do mainMenu pra onde estava
+    mainMenu.Position = subMenu.Position
+    mainMenu.Visible = true
+    subMenu.Visible = false
+end)
