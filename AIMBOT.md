@@ -67,6 +67,17 @@ radiusLabel.TextXAlignment = Enum.TextXAlignment.Left
 radiusLabel.TextScaled = true
 radiusLabel.TextSize = 22
 
+local dicaLabel = Instance.new("TextLabel", mainMenu)
+dicaLabel.Size = UDim2.new(1,-6,0,12)
+dicaLabel.Position = UDim2.new(0.5,6,0,130)  -- aumenta esse valor pra descer mais
+dicaLabel.BackgroundTransparency = 1
+dicaLabel.TextColor3 = Color3.fromRGB(150,200,255)
+dicaLabel.Font = Enum.Font.SourceSansItalic
+dicaLabel.Text = "Aperte B para ativar o Aimbot"
+dicaLabel.TextXAlignment = Enum.TextXAlignment.Left
+dicaLabel.TextScaled = true
+dicaLabel.TextSize = 20
+
 -- Botões de raio
 local btnDec = Instance.new("TextButton", mainMenu)
 btnDec.Size = UDim2.new(0,36,0,28)
