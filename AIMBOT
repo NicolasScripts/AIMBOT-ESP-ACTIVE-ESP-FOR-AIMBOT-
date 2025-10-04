@@ -270,7 +270,7 @@ local function makeBillboardFor(part, player)
 
     local healthBar = Instance.new("Frame", cont)
     healthBar.Size = UDim2.new(1, -8, 0, 6)
-    healthBar.Position = UDim2.new(0,4,0,22)
+    healthBar.Position = UDim2.new(0,2,0,22)
     healthBar.BackgroundColor3 = Color3.fromRGB(0,255,0)
     healthBar.BorderSizePixel = 0
 
@@ -345,7 +345,7 @@ RunService.RenderStepped:Connect(function()
         if hum and state.playersData[entry.player] and state.playersData[entry.player].bill then
             local hb = state.playersData[entry.player].bill.healthBar
             local pct = clamp(hum.Health / hum.MaxHealth, 0, 1)
-            hb.Size = UDim2.new(pct,0,1,0)
+            hb.Size = UDim2.new(pct,0,0,7)
             if pct > 0.6 then hb.BackgroundColor3 = Color3.fromRGB(0,255,0)
             elseif pct > 0.3 then hb.BackgroundColor3 = Color3.fromRGB(255,255,0)
             else hb.BackgroundColor3 = Color3.fromRGB(255,0,0) end
